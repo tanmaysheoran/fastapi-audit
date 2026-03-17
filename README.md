@@ -14,8 +14,29 @@ Multi-tenant audit logging package for FastAPI applications.
 
 ## Installation
 
+### From PyPI (if published publicly)
 ```bash
 pip install audit
+```
+
+### From Private Git Repository
+
+```bash
+# Using HTTPS (recommended, requires GitHub token)
+pip install git+https://github.com/mgmnt-work/audit.git@v0.1.0
+
+# Or with a specific version/tag
+pip install git+https://github.com/mgmnt-work/audit.git@v0.1.0#egg=audit
+```
+
+For CI/CD, set up a GitHub token with `repo` scope and use it:
+```bash
+pip install git+https://$GITHUB_TOKEN@github.com/mgmnt-work/audit.git@v0.1.0
+```
+
+### Local Development
+```bash
+pip install -e /path/to/audit
 ```
 
 ## Quick Start

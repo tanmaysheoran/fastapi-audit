@@ -1,5 +1,9 @@
 # fastapi-audit
 
+[![PyPI version](https://img.shields.io/pypi/v/fastapi-audit.svg)](https://pypi.org/project/fastapi-audit/)
+[![Python versions](https://img.shields.io/pypi/pyversions/fastapi-audit.svg)](https://pypi.org/project/fastapi-audit/)
+[![License](https://img.shields.io/pypi/l/fastapi-audit.svg)](https://pypi.org/project/fastapi-audit/)
+
 Audit logging package for FastAPI applications.
 
 ## Features
@@ -17,33 +21,61 @@ Audit logging package for FastAPI applications.
 ### From PyPI
 
 ```bash
-pip install fastapi-audit
+# Core package (requires asyncpg for PostgreSQL)
+pip install fastapi-audit[asyncpg]
 ```
 
 ### Local Development
 
 ```bash
-pip install -e /path/to/audit
+pip install -e /path/to/audit[asyncpg]
+```
+
+### Database Driver
+
+Only **PostgreSQL with asyncpg** is tested and supported at this time. Install it via the `[asyncpg]` extra:
+
+```bash
+pip install fastapi-audit[asyncpg]
 ```
 
 ## Quick Start
 
 ```python
+from contextlib import asynccontextmanager
+from sqlalchemy.ext.asyncio import create_async_engine
+
 from fastapi import FastAPI
-from fastapi_audit import AuditMiddleware, AuditConfig
+from fastapi_audit import AuditMiddleware, AuditConfig, create_tables
 
-app = FastAPI()
+engine = create_async_engine("postgresql+asyncpg://user:pass@localhost/audit_db")
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await create_tables(engine)
+    yield
+    await engine.dispose()
+
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     AuditMiddleware,
-    config=AuditConfig(
-        control_db_url="postgresql+asyncpg://user:pass@localhost/audit_db"
-    )
+    config=AuditConfig(control_db_url=str(engine.url))
 )
 ```
 
-The legacy `audit` import path still works for compatibility, but `fastapi_audit` is the
-preferred public import path.
+## Database Setup
+
+Before using the middleware, provision the `audit_logs` table in your audit database:
+
+```python
+from sqlalchemy.ext.asyncio import create_async_engine
+from fastapi_audit import create_tables
+
+engine = create_async_engine("postgresql+asyncpg://user:pass@localhost/audit_db")
+await create_tables(engine)
+```
+
+The `create_tables()` helper creates the `audit_logs` table and its associated enum type. Call it once during deployment or as part of a migration step.
 
 ## Configuration
 
@@ -61,7 +93,7 @@ config = AuditConfig(
     exclude_paths={"/health", "/metrics"},
 
     # Optional: Map incoming actor_type values to canonical public values
-    actor_type_aliases={"hashira": "platform_admin", "ops_admin": "platform_admin"},
+    actor_type_aliases={"ops_admin": "platform_admin"},
 
     # Optional: Capture request/response bodies
     capture_request_body=True,
@@ -73,18 +105,6 @@ config = AuditConfig(
     # Optional: Log requests without authenticated actors
     log_anonymous=False,
 )
-```
-
-## Database Migration
-
-Create the `audit_logs` table in your audit database:
-
-```bash
-# Using Alembic
-alembic upgrade head
-
-# Or run the SQL migration directly
-# See migrations/versions/001_create_audit_logs.py
 ```
 
 ## Tenant Context
@@ -119,8 +139,8 @@ Example JWT payload:
 }
 ```
 
-Legacy or organization-specific actor types can be mapped to canonical public values via
-`AuditConfig.actor_type_aliases`. By default, `"hashira"` maps to `"platform_admin"`.
+Organization-specific actor types can be mapped to canonical public values via
+`AuditConfig.actor_type_aliases`.
 
 ## Manual Audit Logging
 
@@ -183,7 +203,7 @@ providing a unified view of application activity.
 - FastAPI / Starlette
 - SQLAlchemy 2.0+ with async support
 - Pydantic v2
-- asyncpg
+- asyncpg (via `pip install fastapi-audit[asyncpg]`)
 
 ## License
 

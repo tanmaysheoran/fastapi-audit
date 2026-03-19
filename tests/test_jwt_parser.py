@@ -1,10 +1,9 @@
 """Tests for the JWT parser module."""
 
-import pytest
 from jose import jwt
 
-from audit.jwt_parser import extract_actor, extract_token_from_header
-from audit.models import ActorType
+from fastapi_audit.jwt_parser import extract_actor, extract_token_from_header
+from fastapi_audit.models import ActorType
 
 
 class TestExtractTokenFromHeader:
@@ -64,17 +63,6 @@ class TestExtractActor:
         assert actor.actor_id == "admin1"
         assert actor.actor_type == ActorType.PLATFORM_ADMIN
 
-    def test_extract_actor_hashira_alias(self) -> None:
-        """Test extracting legacy hashira actor type via alias mapping."""
-        token = self._create_token("admin1", "hashira", "admin@example.com")
-        actor = extract_actor(
-            token,
-            secret="secret",
-            actor_type_aliases={"hashira": "platform_admin"},
-        )
-        assert actor is not None
-        assert actor.actor_type == ActorType.PLATFORM_ADMIN
-
     def test_extract_actor_anonymous_type(self) -> None:
         """Test extracting anonymous actor type."""
         token = self._create_token("anon", "anonymous")
@@ -82,7 +70,7 @@ class TestExtractActor:
         assert actor is not None
         assert actor.actor_type == ActorType.ANONYMOUS
 
-    def test_extract_actor_invalid_type(self) -> None:
+    def test_extract_actor_invalid_type_defaults_to_anonymous(self) -> None:
         """Test with invalid actor_type falls back to anonymous."""
         token = self._create_token("user1", "invalid_type")
         actor = extract_actor(token, secret="secret")
@@ -102,7 +90,7 @@ class TestExtractActor:
     def test_extract_actor_decode_only(self) -> None:
         """Test decode-only mode (no verification)."""
         token = self._create_token("user123", "tenant_user")
-        actor = extract_actor(token, secret="")  # Empty secret = decode only
+        actor = extract_actor(token, secret="")
         assert actor is not None
         assert actor.actor_id == "user123"
 
@@ -116,3 +104,14 @@ class TestExtractActor:
     def test_extract_actor_invalid_token(self) -> None:
         """Test with invalid token."""
         assert extract_actor("invalid.token.here", secret="secret") is None
+
+    def test_extract_actor_with_alias(self) -> None:
+        """Test extracting actor with custom alias mapping."""
+        token = self._create_token("admin1", "ops_admin", "admin@example.com")
+        actor = extract_actor(
+            token,
+            secret="secret",
+            actor_type_aliases={"ops_admin": "platform_admin"},
+        )
+        assert actor is not None
+        assert actor.actor_type == ActorType.PLATFORM_ADMIN

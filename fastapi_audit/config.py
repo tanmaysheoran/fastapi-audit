@@ -1,7 +1,7 @@
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from audit.models import DEFAULT_ACTOR_TYPE_ALIASES, ActorType
+from fastapi_audit.models import ActorType
 
 
 DEFAULT_REDACT_FIELDS: frozenset[str] = frozenset({
@@ -44,7 +44,7 @@ class AuditConfig(BaseSettings):
     control_db_url: str
     redact_fields: set[str] = set(DEFAULT_REDACT_FIELDS)
     exclude_paths: set[str] = set(DEFAULT_EXCLUDE_PATHS)
-    actor_type_aliases: dict[str, str] = dict(DEFAULT_ACTOR_TYPE_ALIASES)
+    actor_type_aliases: dict[str, str] = {}
     capture_request_body: bool = True
     capture_response_body: bool = True
     capture_orm_diffs: bool = True
@@ -72,17 +72,14 @@ class AuditConfig(BaseSettings):
 
     @model_validator(mode="before")
     @classmethod
-    def merge_actor_type_aliases(cls, data: dict[str, object]) -> dict[str, object]:
-        """Merge custom actor type aliases with defaults."""
+    def normalize_actor_type_aliases(cls, data: dict[str, object]) -> dict[str, object]:
+        """Normalize actor type aliases to lowercase."""
         if isinstance(data, dict) and "actor_type_aliases" in data:
             custom_aliases = data["actor_type_aliases"]
             if isinstance(custom_aliases, dict):
                 data["actor_type_aliases"] = {
-                    **DEFAULT_ACTOR_TYPE_ALIASES,
-                    **{
-                        str(key).lower(): str(value).lower()
-                        for key, value in custom_aliases.items()
-                    },
+                    str(key).lower(): str(value).lower()
+                    for key, value in custom_aliases.items()
                 }
         return data
 

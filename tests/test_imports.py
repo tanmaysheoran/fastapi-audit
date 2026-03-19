@@ -1,10 +1,10 @@
-"""Tests for public and compatibility import paths."""
+"""Tests for the public import surface."""
+
+from fastapi_audit import ActorType, AuditConfig, AuditLog, AuditMiddleware, audit_log
 
 
 def test_public_import_surface() -> None:
-    """Test the preferred public import path."""
-    from fastapi_audit import ActorType, AuditConfig, AuditLog, AuditMiddleware, audit_log
-
+    """Test that all public symbols are importable from fastapi_audit."""
     assert ActorType is not None
     assert AuditConfig is not None
     assert AuditLog is not None
@@ -12,12 +12,15 @@ def test_public_import_surface() -> None:
     assert audit_log is not None
 
 
-def test_compat_import_surface() -> None:
-    """Test the compatibility import path."""
-    from audit import ActorType, AuditConfig, AuditLog, AuditMiddleware, audit_log
+def test_actor_type_enum_values() -> None:
+    """Test that ActorType enum has expected values."""
+    assert ActorType.PLATFORM_ADMIN.value == "platform_admin"
+    assert ActorType.TENANT_USER.value == "tenant_user"
+    assert ActorType.ANONYMOUS.value == "anonymous"
 
-    assert ActorType is not None
-    assert AuditConfig is not None
-    assert AuditLog is not None
-    assert AuditMiddleware is not None
-    assert audit_log is not None
+
+def test_create_tables_exported() -> None:
+    """Test that create_tables is exported."""
+    from fastapi_audit import create_tables
+
+    assert callable(create_tables)

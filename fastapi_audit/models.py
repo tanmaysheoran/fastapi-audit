@@ -16,11 +16,6 @@ class ActorType(enum.Enum):
     ANONYMOUS = "anonymous"
 
 
-DEFAULT_ACTOR_TYPE_ALIASES: dict[str, str] = {
-    "hashira": ActorType.PLATFORM_ADMIN.value,
-}
-
-
 def normalize_actor_type(
     actor_type: ActorType | str,
     aliases: dict[str, str] | None = None,

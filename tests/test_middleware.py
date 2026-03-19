@@ -1,10 +1,10 @@
 """Tests for the middleware module."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-from audit.config import AuditConfig
-from audit.middleware import AuditMiddleware
+from fastapi_audit.config import AuditConfig
+from fastapi_audit.middleware import AuditMiddleware
 
 
 class TestAuditMiddleware:
@@ -57,7 +57,7 @@ class TestMiddlewareDispatch:
 
         call_next = AsyncMock(return_value=MagicMock(status_code=200))
 
-        response = await middleware.dispatch(request, call_next)
+        await middleware.dispatch(request, call_next)
         call_next.assert_called_once()
 
     @pytest.mark.asyncio

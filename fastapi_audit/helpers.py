@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from audit.models import DEFAULT_ACTOR_TYPE_ALIASES, ActorType, AuditLog, normalize_actor_type
+from fastapi_audit.models import ActorType, AuditLog, normalize_actor_type
 
 logger = logging.getLogger("audit")
 
@@ -43,10 +43,7 @@ async def audit_log(
     Returns:
         The created AuditLog instance.
     """
-    actor_type = normalize_actor_type(
-        actor_type,
-        actor_type_aliases or DEFAULT_ACTOR_TYPE_ALIASES,
-    )
+    actor_type = normalize_actor_type(actor_type, actor_type_aliases)
 
     audit_entry = AuditLog(
         request_id=request_id or "",

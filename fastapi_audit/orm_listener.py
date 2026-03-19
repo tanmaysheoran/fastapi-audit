@@ -1,7 +1,7 @@
 """ORM-level diff capture through SQLAlchemy session instrumentation.
 
 Design Rationale
-================
+=================
 
 Why class-level AsyncSession listening over engine-level:
 ----------------------------------------------------------

@@ -9,17 +9,17 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from audit.config import AuditConfig
-from audit.jwt_parser import extract_actor, extract_token_from_header
-from audit.models import ActorType
-from audit.orm_listener import (
+from fastapi_audit.config import AuditConfig
+from fastapi_audit.jwt_parser import extract_actor, extract_token_from_header
+from fastapi_audit.models import ActorType
+from fastapi_audit.orm_listener import (
     clear_audit_context,
     get_orm_diffs,
     register_listeners,
     start_audit_context,
 )
-from audit.sanitizer import sanitize_body, sanitize_query_params
-from audit.writer import AuditWriter
+from fastapi_audit.sanitizer import sanitize_body, sanitize_query_params
+from fastapi_audit.writer import AuditWriter
 
 logger = logging.getLogger("audit")
 

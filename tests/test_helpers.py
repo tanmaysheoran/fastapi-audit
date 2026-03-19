@@ -3,8 +3,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from audit.helpers import audit_log
-from audit.models import ActorType
+from fastapi_audit.helpers import audit_log
+from fastapi_audit.models import ActorType
 
 
 class TestAuditLogHelper:
@@ -18,7 +18,7 @@ class TestAuditLogHelper:
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
 
-        result = await audit_log(
+        await audit_log(
             db=db,
             action="tenant.provisioned",
             actor_id="user123",
@@ -39,7 +39,7 @@ class TestAuditLogHelper:
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
 
-        result = await audit_log(
+        await audit_log(
             db=db,
             action="tenant.provisioned",
             actor_id="user123",
@@ -58,7 +58,7 @@ class TestAuditLogHelper:
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
 
-        result = await audit_log(
+        await audit_log(
             db=db,
             action="system.error",
             actor_id="anonymous",
@@ -75,7 +75,7 @@ class TestAuditLogHelper:
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
 
-        result = await audit_log(
+        await audit_log(
             db=db,
             action="user.login",
             actor_id="user123",
@@ -85,24 +85,6 @@ class TestAuditLogHelper:
         db.add.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_audit_log_actor_type_alias(self) -> None:
-        """Test audit log accepts aliased string actor_type."""
-        db = AsyncMock()
-        db.add = MagicMock()
-        db.commit = AsyncMock()
-        db.refresh = AsyncMock()
-
-        await audit_log(
-            db=db,
-            action="user.login",
-            actor_id="user123",
-            actor_type="hashira",
-        )
-
-        created = db.add.call_args.args[0]
-        assert created.actor_type == ActorType.PLATFORM_ADMIN
-
-    @pytest.mark.asyncio
     async def test_audit_log_actor_type_enum(self) -> None:
         """Test audit log accepts ActorType enum."""
         db = AsyncMock()
@@ -110,7 +92,7 @@ class TestAuditLogHelper:
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
 
-        result = await audit_log(
+        await audit_log(
             db=db,
             action="user.login",
             actor_id="user123",
@@ -136,3 +118,22 @@ class TestAuditLogHelper:
             )
 
         db.rollback.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_audit_log_alias_resolution(self) -> None:
+        """Test that custom aliases resolve in audit_log."""
+        db = AsyncMock()
+        db.add = MagicMock()
+        db.commit = AsyncMock()
+        db.refresh = AsyncMock()
+
+        await audit_log(
+            db=db,
+            action="user.login",
+            actor_id="user123",
+            actor_type="ops_admin",
+            actor_type_aliases={"ops_admin": "platform_admin"},
+        )
+
+        created = db.add.call_args.args[0]
+        assert created.actor_type == ActorType.PLATFORM_ADMIN

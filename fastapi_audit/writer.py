@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from audit.config import AuditConfig
-from audit.models import AuditLog
+from fastapi_audit.config import AuditConfig
+from fastapi_audit.models import AuditLog
 
 if TYPE_CHECKING:
     pass

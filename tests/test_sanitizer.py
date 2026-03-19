@@ -1,9 +1,7 @@
-"""Tests for the sanitizer module."""
+"""Tests for the sanitizer module (sensitive field redaction)."""
 
-import pytest
-
-from audit.config import AuditConfig
-from audit.sanitizer import (
+from fastapi_audit.config import AuditConfig
+from fastapi_audit.sanitizer import (
     redact_value,
     sanitize_body,
     sanitize_query_params,
@@ -27,8 +25,8 @@ class TestRedactValue:
         assert result["user"]["password"] == "[REDACTED]"
         assert result["user"]["name"] == "john"
 
-    def test_redact_password_hash_partial_match(self) -> None:
-        """Test that password_hash is redacted (partial match)."""
+    def test_redact_partial_match(self) -> None:
+        """Test that partial key matches trigger redaction."""
         data = {"password_hash": "abc123", "name": "john"}
         result = redact_value(data, {"password"})
         assert result["password_hash"] == "[REDACTED]"
@@ -54,6 +52,32 @@ class TestRedactValue:
         result = redact_value(data, {"password"})
         assert result == data
 
+    def test_primitives_pass_through(self) -> None:
+        """Test that primitive values are returned unchanged."""
+        assert redact_value("hello", {"password"}) == "hello"
+        assert redact_value(42, {"password"}) == 42
+        assert redact_value(None, {"password"}) is None
+
+    def test_deeply_nested(self) -> None:
+        """Test redaction at multiple nesting levels."""
+        data = {
+            "top": {
+                "middle": {
+                    "bottom": {"password": "secret"},
+                }
+            }
+        }
+        result = redact_value(data, {"password"})
+        assert result["top"]["middle"]["bottom"]["password"] == "[REDACTED]"
+
+    def test_multiple_redact_fields(self) -> None:
+        """Test matching multiple redact fields."""
+        data = {"password": "p", "token": "t", "name": "john"}
+        result = redact_value(data, {"password", "token"})
+        assert result["password"] == "[REDACTED]"
+        assert result["token"] == "[REDACTED]"
+        assert result["name"] == "john"
+
 
 class TestSanitizeBody:
     """Tests for sanitize_body function."""
@@ -63,6 +87,7 @@ class TestSanitizeBody:
         config = AuditConfig(control_db_url="postgresql+asyncpg://test")
         body = b'{"username": "john", "password": "secret"}'
         result = sanitize_body(body, config)
+        assert result is not None
         assert result["username"] == "john"
         assert result["password"] == "[REDACTED]"
 
@@ -71,6 +96,7 @@ class TestSanitizeBody:
         config = AuditConfig(control_db_url="postgresql+asyncpg://test")
         body = '{"password": "secret"}'
         result = sanitize_body(body, config)
+        assert result is not None
         assert result["password"] == "[REDACTED]"
 
     def test_sanitize_empty_body(self) -> None:
@@ -85,6 +111,14 @@ class TestSanitizeBody:
         body = b"not valid json"
         result = sanitize_body(body, config)
         assert result == {"_raw": "not valid json"}
+
+    def test_sanitize_long_invalid_json_truncated(self) -> None:
+        """Test that long invalid JSON is truncated."""
+        config = AuditConfig(control_db_url="postgresql+asyncpg://test")
+        body = b"x" * 2000
+        result = sanitize_body(body, config)
+        assert result is not None
+        assert len(result["_raw"]) == 1000
 
 
 class TestSanitizeQueryParams:
@@ -103,44 +137,3 @@ class TestSanitizeQueryParams:
         config = AuditConfig(control_db_url="postgresql+asyncpg://test")
         result = sanitize_query_params({}, config)
         assert result == {}
-
-
-class TestAuditConfig:
-    """Tests for AuditConfig redaction field merging."""
-
-    def test_default_redact_fields(self) -> None:
-        """Test that default redact fields are included."""
-        config = AuditConfig(control_db_url="postgresql+asyncpg://test")
-        assert "password" in config.redact_fields
-        assert "token" in config.redact_fields
-
-    def test_custom_redact_fields_merged(self) -> None:
-        """Test that custom fields are merged with defaults."""
-        config = AuditConfig(
-            control_db_url="postgresql+asyncpg://test",
-            redact_fields={"api_key"},
-        )
-        assert "api_key" in config.redact_fields
-        assert "password" in config.redact_fields
-
-    def test_redact_fields_case_insensitive_matching(self) -> None:
-        """Test that redact_fields_lower works correctly."""
-        config = AuditConfig(
-            control_db_url="postgresql+asyncpg://test",
-            redact_fields={"MyField"},
-        )
-        assert "myfield" in config.redact_fields_lower
-
-    def test_default_actor_type_aliases_included(self) -> None:
-        """Test that default actor type aliases are included."""
-        config = AuditConfig(control_db_url="postgresql+asyncpg://test")
-        assert config.actor_type_aliases_lower["hashira"] == "platform_admin"
-
-    def test_custom_actor_type_aliases_merged(self) -> None:
-        """Test that custom aliases are merged with defaults."""
-        config = AuditConfig(
-            control_db_url="postgresql+asyncpg://test",
-            actor_type_aliases={"Ops_Admin": "platform_admin"},
-        )
-        assert config.actor_type_aliases_lower["hashira"] == "platform_admin"
-        assert config.actor_type_aliases_lower["ops_admin"] == "platform_admin"

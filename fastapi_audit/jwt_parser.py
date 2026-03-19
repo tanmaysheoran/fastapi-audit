@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from jose import JWTError, jwt
 
-from audit.models import DEFAULT_ACTOR_TYPE_ALIASES, ActorType, normalize_actor_type
+from fastapi_audit.models import ActorType, normalize_actor_type
 
 
 @dataclass
@@ -59,7 +59,7 @@ def extract_actor(
 
     actor_type = normalize_actor_type(
         str(payload.get("actor_type", ActorType.ANONYMOUS.value)),
-        actor_type_aliases or DEFAULT_ACTOR_TYPE_ALIASES,
+        actor_type_aliases,
     )
 
     email = payload.get("email")

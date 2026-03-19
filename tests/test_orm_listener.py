@@ -1,8 +1,6 @@
 """Tests for the ORM listener module."""
 
-import pytest
-
-from audit.orm_listener import (
+from fastapi_audit.orm_listener import (
     clear_audit_context,
     get_orm_diffs,
     register_listeners,

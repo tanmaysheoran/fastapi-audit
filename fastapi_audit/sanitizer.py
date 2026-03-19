@@ -3,7 +3,7 @@
 import json
 from typing import Any, TypeVar, cast
 
-from audit.config import AuditConfig
+from fastapi_audit.config import AuditConfig
 
 T = TypeVar("T")
 

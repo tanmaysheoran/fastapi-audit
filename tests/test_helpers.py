@@ -22,10 +22,10 @@ class TestAuditLogHelper:
             db=db,
             action="tenant.provisioned",
             actor_id="user123",
-            actor_type="hashira",
+            actor_type="platform_admin",
             actor_email="admin@example.com",
             tenant_id="tenant-456",
-            tenant_slug="acme-corp",
+            tenant_slug="example-tenant",
         )
 
         db.add.assert_called_once()
@@ -43,7 +43,7 @@ class TestAuditLogHelper:
             db=db,
             action="tenant.provisioned",
             actor_id="user123",
-            actor_type="hashira",
+            actor_type="platform_admin",
             metadata={"plan": "pro", "region": "us-east"},
         )
 
@@ -85,6 +85,24 @@ class TestAuditLogHelper:
         db.add.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_audit_log_actor_type_alias(self) -> None:
+        """Test audit log accepts aliased string actor_type."""
+        db = AsyncMock()
+        db.add = MagicMock()
+        db.commit = AsyncMock()
+        db.refresh = AsyncMock()
+
+        await audit_log(
+            db=db,
+            action="user.login",
+            actor_id="user123",
+            actor_type="hashira",
+        )
+
+        created = db.add.call_args.args[0]
+        assert created.actor_type == ActorType.PLATFORM_ADMIN
+
+    @pytest.mark.asyncio
     async def test_audit_log_actor_type_enum(self) -> None:
         """Test audit log accepts ActorType enum."""
         db = AsyncMock()
@@ -114,7 +132,7 @@ class TestAuditLogHelper:
                 db=db,
                 action="test.action",
                 actor_id="user123",
-                actor_type="hashira",
+                actor_type="platform_admin",
             )
 
         db.rollback.assert_called_once()

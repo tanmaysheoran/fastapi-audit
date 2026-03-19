@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from jose import JWTError, jwt
 
-from audit.models import ActorType
+from audit.models import DEFAULT_ACTOR_TYPE_ALIASES, ActorType, normalize_actor_type
 
 
 @dataclass
@@ -19,6 +19,7 @@ class Actor:
 def extract_actor(
     token: str | None,
     secret: str = "",
+    actor_type_aliases: dict[str, str] | None = None,
     algorithms: list[str] = ["HS256", "RS256"],
 ) -> Actor | None:
     """Extract actor information from JWT token.
@@ -26,6 +27,7 @@ def extract_actor(
     Args:
         token: JWT token string from Authorization header.
         secret: Secret/key for JWT verification (empty for decode-only mode).
+        actor_type_aliases: Mapping of incoming values to canonical actor types.
         algorithms: List of allowed algorithms.
 
     Returns:
@@ -55,11 +57,10 @@ def extract_actor(
     if not sub:
         return None
 
-    actor_type_str = payload.get("actor_type", "anonymous")
-    try:
-        actor_type = ActorType(actor_type_str)
-    except ValueError:
-        actor_type = ActorType.ANONYMOUS
+    actor_type = normalize_actor_type(
+        str(payload.get("actor_type", ActorType.ANONYMOUS.value)),
+        actor_type_aliases or DEFAULT_ACTOR_TYPE_ALIASES,
+    )
 
     email = payload.get("email")
 

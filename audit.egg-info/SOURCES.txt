@@ -14,9 +14,11 @@ audit.egg-info/SOURCES.txt
 audit.egg-info/dependency_links.txt
 audit.egg-info/requires.txt
 audit.egg-info/top_level.txt
+fastapi_audit/__init__.py
 migrations/versions/001_create_audit_logs.py
 tests/__init__.py
 tests/test_helpers.py
+tests/test_imports.py
 tests/test_jwt_parser.py
 tests/test_middleware.py
 tests/test_orm_listener.py

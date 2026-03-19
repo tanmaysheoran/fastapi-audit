@@ -11,9 +11,31 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 class ActorType(enum.Enum):
     """Enum representing the type of actor performing an action."""
 
-    HASHIRA = "hashira"
+    PLATFORM_ADMIN = "platform_admin"
     TENANT_USER = "tenant_user"
     ANONYMOUS = "anonymous"
+
+
+DEFAULT_ACTOR_TYPE_ALIASES: dict[str, str] = {
+    "hashira": ActorType.PLATFORM_ADMIN.value,
+}
+
+
+def normalize_actor_type(
+    actor_type: ActorType | str,
+    aliases: dict[str, str] | None = None,
+) -> ActorType:
+    """Normalize an actor type string to a canonical enum value."""
+    if isinstance(actor_type, ActorType):
+        return actor_type
+
+    normalized = actor_type.strip().lower()
+    resolved = (aliases or {}).get(normalized, normalized)
+
+    try:
+        return ActorType(resolved)
+    except ValueError:
+        return ActorType.ANONYMOUS
 
 
 class Base(DeclarativeBase):
@@ -25,8 +47,8 @@ class Base(DeclarativeBase):
 class AuditLog(Base):
     """Audit log model for storing HTTP request/response and ORM diffs.
 
-    This table is stored in the control DB and provides a unified view
-    of all audit events across all tenants and database tiers.
+    This table is stored in the audit database and provides a unified view
+    of audit events across the application.
     """
 
     __tablename__ = "audit_logs"

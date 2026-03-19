@@ -6,13 +6,12 @@ Design Rationale
 Why class-level AsyncSession listening over engine-level:
 ----------------------------------------------------------
 Engine-level listeners (e.g., event.listen(engine, "after_flush", ...)) only capture
-events for that specific engine. In a multi-tenant system with dynamically-created
-tenant databases, we cannot register listeners on every tenant engine upfront.
+events for that specific engine. In applications with multiple databases or
+dynamically-created engines, we cannot register listeners on every engine upfront.
 
 By listening on AsyncSession.sync_session_class, we intercept ALL session flushes
 regardless of which engine they connect to. This enables zero-configuration operation
-where the package works automatically with any database session in the application,
-including dynamically-created tenant databases.
+where the package works automatically with any database session in the application.
 
 Why ContextVar over threading.local:
 ------------------------------------
@@ -62,8 +61,7 @@ def register_listeners() -> None:
 
     This function is idempotent - calling it multiple times is safe.
     Listeners are registered at the class level on AsyncSession, ensuring
-    they capture flush events from ALL session instances (control DB and
-    all tenant DBs).
+    they capture flush events from ALL session instances across the application.
 
     Must be called once during middleware initialization if capture_orm_diffs
     is enabled.

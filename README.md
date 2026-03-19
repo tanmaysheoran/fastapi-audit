@@ -1,40 +1,27 @@
-# audit
+# fastapi-audit
 
-Multi-tenant audit logging package for FastAPI applications.
+Audit logging package for FastAPI applications.
 
 ## Features
 
-- **HTTP Request/Response Capture**: Logs method, path, status code, response time, IP, user agent
+- **HTTP Request/Response Capture**: Logs method, path, status code, response time, IP, and user agent
 - **JWT-based Actor Identification**: Extracts actor ID, type, and email from JWT tokens
-- **ORM-level Diff Tracking**: Captures INSERT, UPDATE, DELETE operations across all databases
-- **Multi-tenant Support**: Works with subdomain-based multi-tenancy architecture
-- **Sensitive Data Redaction**: Automatic redaction of passwords, tokens, secrets, etc.
-- **Fire-and-Forget Writes**: Non-blocking audit writes to avoid request latency impact
-- **Manual Audit Logging**: Support for background tasks and non-HTTP contexts
+- **ORM-level Diff Tracking**: Captures INSERT, UPDATE, and DELETE operations across application sessions
+- **Tenant-Aware Context Support**: Works with application-provided tenant context
+- **Sensitive Data Redaction**: Automatically redacts passwords, tokens, secrets, and similar fields
+- **Fire-and-Forget Writes**: Writes audit records asynchronously to avoid adding request latency
+- **Manual Audit Logging**: Supports background tasks and non-HTTP contexts
 
 ## Installation
 
-### From PyPI (if published publicly)
-```bash
-pip install audit
-```
-
-### From Private Git Repository
+### From PyPI
 
 ```bash
-# Using HTTPS (recommended, requires GitHub token)
-pip install git+https://github.com/mgmnt-work/audit.git@v0.1.0
-
-# Or with a specific version/tag
-pip install git+https://github.com/mgmnt-work/audit.git@v0.1.0#egg=audit
-```
-
-For CI/CD, set up a GitHub token with `repo` scope and use it:
-```bash
-pip install git+https://$GITHUB_TOKEN@github.com/mgmnt-work/audit.git@v0.1.0
+pip install fastapi-audit
 ```
 
 ### Local Development
+
 ```bash
 pip install -e /path/to/audit
 ```
@@ -43,7 +30,7 @@ pip install -e /path/to/audit
 
 ```python
 from fastapi import FastAPI
-from audit import AuditMiddleware, AuditConfig
+from fastapi_audit import AuditMiddleware, AuditConfig
 
 app = FastAPI()
 
@@ -55,28 +42,34 @@ app.add_middleware(
 )
 ```
 
+The legacy `audit` import path still works for compatibility, but `fastapi_audit` is the
+preferred public import path.
+
 ## Configuration
 
 ```python
-from audit import AuditConfig
+from fastapi_audit import AuditConfig
 
 config = AuditConfig(
-    # Required: Connection URL for the control database
+    # Required: Connection URL for the audit database
     control_db_url="postgresql+asyncpg://user:pass@localhost/audit_db",
-    
+
     # Optional: Fields to redact (merged with defaults)
     redact_fields={"password", "token", "secret", "custom_field"},
-    
+
     # Optional: Paths to exclude from audit logging
     exclude_paths={"/health", "/metrics"},
-    
+
+    # Optional: Map incoming actor_type values to canonical public values
+    actor_type_aliases={"hashira": "platform_admin", "ops_admin": "platform_admin"},
+
     # Optional: Capture request/response bodies
     capture_request_body=True,
     capture_response_body=True,
-    
+
     # Optional: Enable ORM diff capture
     capture_orm_diffs=True,
-    
+
     # Optional: Log requests without authenticated actors
     log_anonymous=False,
 )
@@ -84,7 +77,7 @@ config = AuditConfig(
 
 ## Database Migration
 
-Create the `audit_logs` table in your control database:
+Create the `audit_logs` table in your audit database:
 
 ```bash
 # Using Alembic
@@ -96,40 +89,45 @@ alembic upgrade head
 
 ## Tenant Context
 
-The middleware expects your tenant resolution middleware to set:
+If your application is tenant-aware, the middleware can read tenant context from:
 
 ```python
-# Example: In your TenantResolutionMiddleware
-request.state.tenant = Tenant(tenant_id="...", tenant_slug="acme-corp")
+# Example: in your own tenant-resolution middleware
+request.state.tenant = Tenant(tenant_id="...", tenant_slug="example-tenant")
 ```
 
 The `tenant` object should have `tenant_id` and `tenant_slug` attributes.
 
 ## JWT Token Requirements
 
-The middleware extracts actor information from JWT tokens in the `Authorization` header. Expected JWT claims:
+The middleware extracts actor information from JWT tokens in the `Authorization` header.
+Expected JWT claims:
 
 | Claim | Required | Description |
 |-------|----------|-------------|
 | `sub` | Yes | User ID |
-| `actor_type` | No | `hashira`, `tenant_user`, or `anonymous` (default) |
+| `actor_type` | No | `platform_admin`, `tenant_user`, or `anonymous` (default) |
 | `email` | No | User email address |
 
 Example JWT payload:
+
 ```json
 {
   "sub": "user-123",
-  "actor_type": "tenant_user",
+  "actor_type": "platform_admin",
   "email": "user@example.com"
 }
 ```
+
+Legacy or organization-specific actor types can be mapped to canonical public values via
+`AuditConfig.actor_type_aliases`. By default, `"hashira"` maps to `"platform_admin"`.
 
 ## Manual Audit Logging
 
 For background tasks or events outside the HTTP lifecycle:
 
 ```python
-from audit import audit_log, ActorType
+from fastapi_audit import audit_log, ActorType
 from sqlalchemy.ext.asyncio import AsyncSession
 
 async def provision_tenant(db: AsyncSession):
@@ -137,10 +135,10 @@ async def provision_tenant(db: AsyncSession):
         db=db,
         action="tenant.provisioned",
         actor_id="admin-user-id",
-        actor_type=ActorType.HASHIRA,
+        actor_type=ActorType.PLATFORM_ADMIN,
         actor_email="admin@example.com",
         tenant_id="tenant-uuid",
-        tenant_slug="acme-corp",
+        tenant_slug="example-tenant",
         metadata={"plan": "pro", "region": "us-east"}
     )
 ```
@@ -159,22 +157,25 @@ export AUDIT_LOG_ANONYMOUS="false"
 
 ### HTTP Layer
 
-The middleware intercepts all requests and captures:
-- Request metadata (method, path, query params)
-- Response metadata (status code, response time)
-- Actor information from JWT
-- Tenant context from `request.state.tenant`
+The middleware intercepts requests and captures:
+
+- Request metadata such as method, path, and query params
+- Response metadata such as status code and response time
+- Actor information from JWT claims
+- Optional tenant context from `request.state.tenant`
 
 ### ORM Layer
 
 SQLAlchemy event listeners capture database changes:
-- Class-level listeners on `AsyncSession` work with all databases
-- Context variables isolate diffs per-request
-- Supports INSERT, UPDATE, and DELETE operations
+
+- Class-level listeners on `AsyncSession` work across application sessions
+- Context variables isolate diffs per request
+- INSERT, UPDATE, and DELETE operations are recorded
 
 ### Storage
 
-All audit logs are written to a single `audit_logs` table in the control database, providing a unified view across all tenants.
+All audit logs are written to a single `audit_logs` table in the audit database,
+providing a unified view of application activity.
 
 ## Requirements
 

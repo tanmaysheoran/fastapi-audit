@@ -28,7 +28,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
     """FastAPI middleware for comprehensive audit logging.
 
     Captures HTTP request/response metadata and ORM-level field diffs,
-    writing to a centralized audit_logs table in the control DB.
+    writing to a centralized audit_logs table in the audit database.
 
     The middleware is non-blocking - audit writes are fire-and-forget
     to avoid impacting request latency.
@@ -128,7 +128,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
         if not token:
             return None
 
-        actor = extract_actor(token)
+        actor = extract_actor(token, actor_type_aliases=self._config.actor_type_aliases_lower)
         if actor:
             return {
                 "actor_id": actor.actor_id,

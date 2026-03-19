@@ -130,3 +130,17 @@ class TestAuditConfig:
             redact_fields={"MyField"},
         )
         assert "myfield" in config.redact_fields_lower
+
+    def test_default_actor_type_aliases_included(self) -> None:
+        """Test that default actor type aliases are included."""
+        config = AuditConfig(control_db_url="postgresql+asyncpg://test")
+        assert config.actor_type_aliases_lower["hashira"] == "platform_admin"
+
+    def test_custom_actor_type_aliases_merged(self) -> None:
+        """Test that custom aliases are merged with defaults."""
+        config = AuditConfig(
+            control_db_url="postgresql+asyncpg://test",
+            actor_type_aliases={"Ops_Admin": "platform_admin"},
+        )
+        assert config.actor_type_aliases_lower["hashira"] == "platform_admin"
+        assert config.actor_type_aliases_lower["ops_admin"] == "platform_admin"

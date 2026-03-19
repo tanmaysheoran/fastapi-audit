@@ -21,7 +21,7 @@ logger = logging.getLogger("audit")
 
 
 class AuditWriter:
-    """Async writer for audit logs to the control database.
+    """Async writer for audit logs to the audit database.
 
     This class manages its own engine and session factory, separate from
     the consuming application's database sessions. It provides fire-and-

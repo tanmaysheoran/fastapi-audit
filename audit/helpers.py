@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from audit.models import ActorType, AuditLog
+from audit.models import DEFAULT_ACTOR_TYPE_ALIASES, ActorType, AuditLog, normalize_actor_type
 
 logger = logging.getLogger("audit")
 
@@ -21,6 +21,7 @@ async def audit_log(
     tenant_slug: str | None = None,
     request_id: str | None = None,
     metadata: dict[str, Any] | None = None,
+    actor_type_aliases: dict[str, str] | None = None,
 ) -> AuditLog:
     """Create an audit log entry for non-HTTP contexts.
 
@@ -28,24 +29,24 @@ async def audit_log(
     the normal HTTP request lifecycle.
 
     Args:
-        db: Async SQLAlchemy session connected to the control DB.
+        db: Async SQLAlchemy session connected to the audit DB.
         action: Action name (e.g., "tenant.provisioned", "user.created").
         actor_id: ID of the actor performing the action.
-        actor_type: Type of actor (hashira, tenant_user, anonymous).
+        actor_type: Type of actor (platform_admin, tenant_user, anonymous).
         actor_email: Email of the actor, if available.
         tenant_id: Associated tenant ID, if applicable.
         tenant_slug: Associated tenant slug, if applicable.
         request_id: Request ID for correlation, if applicable.
         metadata: Additional metadata to store in extra_metadata.
+        actor_type_aliases: Mapping of incoming values to canonical actor types.
 
     Returns:
         The created AuditLog instance.
     """
-    if isinstance(actor_type, str):
-        try:
-            actor_type = ActorType(actor_type)
-        except ValueError:
-            actor_type = ActorType.ANONYMOUS
+    actor_type = normalize_actor_type(
+        actor_type,
+        actor_type_aliases or DEFAULT_ACTOR_TYPE_ALIASES,
+    )
 
     audit_entry = AuditLog(
         request_id=request_id or "",

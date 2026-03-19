@@ -1,6 +1,8 @@
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from audit.models import DEFAULT_ACTOR_TYPE_ALIASES, ActorType
+
 
 DEFAULT_REDACT_FIELDS: frozenset[str] = frozenset({
     "password",
@@ -24,9 +26,10 @@ class AuditConfig(BaseSettings):
     """Configuration for the audit middleware.
 
     Attributes:
-        control_db_url: Async PostgreSQL connection URL for the control DB.
+        control_db_url: Async PostgreSQL connection URL for the audit DB.
         redact_fields: Fields to redact (merged with defaults). Case-insensitive partial match.
         exclude_paths: URL paths to exclude from audit logging.
+        actor_type_aliases: Aliases mapped to canonical actor types during parsing.
         capture_request_body: Whether to capture request body snapshots.
         capture_response_body: Whether to capture response body snapshots.
         capture_orm_diffs: Whether to capture ORM-level field diffs.
@@ -41,6 +44,7 @@ class AuditConfig(BaseSettings):
     control_db_url: str
     redact_fields: set[str] = set(DEFAULT_REDACT_FIELDS)
     exclude_paths: set[str] = set(DEFAULT_EXCLUDE_PATHS)
+    actor_type_aliases: dict[str, str] = dict(DEFAULT_ACTOR_TYPE_ALIASES)
     capture_request_body: bool = True
     capture_response_body: bool = True
     capture_orm_diffs: bool = True
@@ -66,6 +70,22 @@ class AuditConfig(BaseSettings):
                 data["exclude_paths"] = DEFAULT_EXCLUDE_PATHS | custom_paths
         return data
 
+    @model_validator(mode="before")
+    @classmethod
+    def merge_actor_type_aliases(cls, data: dict[str, object]) -> dict[str, object]:
+        """Merge custom actor type aliases with defaults."""
+        if isinstance(data, dict) and "actor_type_aliases" in data:
+            custom_aliases = data["actor_type_aliases"]
+            if isinstance(custom_aliases, dict):
+                data["actor_type_aliases"] = {
+                    **DEFAULT_ACTOR_TYPE_ALIASES,
+                    **{
+                        str(key).lower(): str(value).lower()
+                        for key, value in custom_aliases.items()
+                    },
+                }
+        return data
+
     def should_exclude(self, path: str) -> bool:
         """Check if the given path should be excluded from audit logging."""
         return path in self.exclude_paths
@@ -74,3 +94,16 @@ class AuditConfig(BaseSettings):
     def redact_fields_lower(self) -> set[str]:
         """Return lowercase version of redact_fields for case-insensitive matching."""
         return {f.lower() for f in self.redact_fields}
+
+    @property
+    def actor_type_aliases_lower(self) -> dict[str, str]:
+        """Return a normalized alias map with lowercase keys and values."""
+        return {
+            key.lower(): value.lower()
+            for key, value in self.actor_type_aliases.items()
+        }
+
+    @property
+    def canonical_actor_types(self) -> set[str]:
+        """Return the supported canonical actor type values."""
+        return {actor_type.value for actor_type in ActorType}

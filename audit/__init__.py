@@ -1,7 +1,7 @@
-"""audit: Multi-tenant audit logging for FastAPI.
+"""Compatibility import surface for fastapi-audit.
 
-This package provides comprehensive audit logging for FastAPI applications
-with multi-tenant architecture. It captures:
+This package provides comprehensive audit logging for FastAPI applications.
+It captures:
 
 - HTTP request/response metadata (method, path, status, timing, etc.)
 - JWT-based actor identification
@@ -10,7 +10,7 @@ with multi-tenant architecture. It captures:
 
 Usage:
     from fastapi import FastAPI
-    from audit import AuditMiddleware, AuditConfig
+    from fastapi_audit import AuditMiddleware, AuditConfig
 
     app = FastAPI()
     app.add_middleware(

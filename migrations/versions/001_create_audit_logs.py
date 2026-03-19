@@ -23,7 +23,7 @@ def upgrade() -> None:
         sa.Column('actor_id', sa.String(255), nullable=False),
         sa.Column(
             'actor_type',
-            sa.Enum('HASHIRA', 'TENANT_USER', 'ANONYMOUS', name='actor_type_enum'),
+            sa.Enum('PLATFORM_ADMIN', 'TENANT_USER', 'ANONYMOUS', name='actor_type_enum'),
             nullable=False
         ),
         sa.Column('actor_email', sa.String(255), nullable=True),

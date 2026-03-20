@@ -169,7 +169,7 @@ def _extract_insert(obj: Any) -> dict[str, Any]:
     Returns:
         Diff dict with operation, table, record_id, before (null), and after.
     """
-    mapper = inspect(obj)
+    mapper = inspect(obj).mapper
     table = mapper.local_table.name
     pk = _extract_pk(mapper)
     after = _extract_attributes(mapper)
@@ -193,7 +193,7 @@ def _extract_update(session: Any, obj: Any) -> dict[str, Any]:
     Returns:
         Diff dict with operation, table, record_id, before, and after.
     """
-    mapper = inspect(obj)
+    mapper = inspect(obj).mapper
     table = mapper.local_table.name
     pk = _extract_pk(mapper)
 
@@ -225,7 +225,7 @@ def _extract_delete(obj: Any) -> dict[str, Any]:
     Returns:
         Diff dict with operation, table, record_id, before, and after (null).
     """
-    mapper = inspect(obj)
+    mapper = inspect(obj).mapper
     table = mapper.local_table.name
     pk = _extract_pk(mapper)
     before = _extract_attributes(mapper)

@@ -1,7 +1,7 @@
 """Tests for the middleware module."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi_audit.config import AuditConfig
 from fastapi_audit.middleware import AuditMiddleware
@@ -36,84 +36,216 @@ class TestAuditMiddleware:
         assert config.log_anonymous is True
 
 
-class TestMiddlewareDispatch:
-    """Tests for middleware dispatch."""
+class TestMiddlewareIPExtraction:
+    """Tests for client IP extraction with trusted proxy depth."""
 
-    @pytest.mark.asyncio
-    async def test_middleware_excludes_path(self) -> None:
-        """Test that middleware excludes configured paths."""
+    def test_get_client_ip_trusted_proxy_depth_zero(self) -> None:
+        """Test that X-Forwarded-For is ignored when depth is 0."""
         config = AuditConfig(
             control_db_url="postgresql+asyncpg://test",
-            exclude_paths={"/health"},
+            trusted_proxy_depth=0,
         )
-
         app = MagicMock()
         middleware = AuditMiddleware(app, config)
 
-        request = MagicMock()
-        request.url.path = "/health"
-        request.method = "GET"
-        request.headers = {}
+        scope = {"client": ("192.168.1.100", 8000)}
+        headers = MagicMock()
+        headers.get = MagicMock(return_value="10.0.0.1, 192.168.1.1")
 
-        call_next = AsyncMock(return_value=MagicMock(status_code=200))
+        ip = middleware._get_client_ip(scope, headers)
+        assert ip == "192.168.1.100"
 
-        await middleware.dispatch(request, call_next)
-        call_next.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_middleware_captures_request(self) -> None:
-        """Test that middleware captures request data."""
+    def test_get_client_ip_trusted_proxy_depth_one(self) -> None:
+        """Test that last IP before proxy is extracted when depth is 1."""
         config = AuditConfig(
             control_db_url="postgresql+asyncpg://test",
-            capture_request_body=False,
-            capture_response_body=False,
-            capture_orm_diffs=False,
-            log_anonymous=True,
+            trusted_proxy_depth=1,
         )
-
         app = MagicMock()
         middleware = AuditMiddleware(app, config)
-        middleware._initialized = True
-        middleware._writer = AsyncMock()
 
-        request = MagicMock()
-        request.url.path = "/api/users"
-        request.method = "GET"
-        request.headers = {"X-Request-ID": "test-123"}
-        request.query_params = {}
-        request.state = MagicMock()
+        scope = {"client": ("127.0.0.1", 8000)}
+        headers = MagicMock()
+        headers.get = MagicMock(return_value="10.0.0.1, 192.168.1.1, 172.16.0.1")
 
-        response = MagicMock()
-        response.status_code = 200
+        ip = middleware._get_client_ip(scope, headers)
+        assert ip == "172.16.0.1"
 
-        call_next = AsyncMock(return_value=response)
+    def test_get_client_ip_multi_proxy(self) -> None:
+        """Test client IP extraction with multiple proxies."""
+        config = AuditConfig(
+            control_db_url="postgresql+asyncpg://test",
+            trusted_proxy_depth=2,
+        )
+        app = MagicMock()
+        middleware = AuditMiddleware(app, config)
 
-        await middleware.dispatch(request, call_next)
-        middleware._writer.write.assert_called_once()
+        scope = {"client": ("127.0.0.1", 8000)}
+        headers = MagicMock()
+        headers.get = MagicMock(return_value="10.0.0.1, 192.168.1.1, 172.16.0.1, 172.16.0.5")
 
-    def test_get_client_ip(self) -> None:
-        """Test client IP extraction."""
+        ip = middleware._get_client_ip(scope, headers)
+        assert ip == "172.16.0.1"
+
+    def test_get_client_ip_no_forwarded_header(self) -> None:
+        """Test fallback to direct client when no X-Forwarded-For."""
+        config = AuditConfig(
+            control_db_url="postgresql+asyncpg://test",
+            trusted_proxy_depth=1,
+        )
+        app = MagicMock()
+        middleware = AuditMiddleware(app, config)
+
+        scope = {"client": ("192.168.1.100", 8000)}
+        headers = MagicMock()
+        headers.get = MagicMock(return_value=None)
+
+        ip = middleware._get_client_ip(scope, headers)
+        assert ip == "192.168.1.100"
+
+    def test_get_client_ip_no_client_in_scope(self) -> None:
+        """Test fallback when no client in scope."""
+        config = AuditConfig(
+            control_db_url="postgresql+asyncpg://test",
+            trusted_proxy_depth=0,
+        )
+        app = MagicMock()
+        middleware = AuditMiddleware(app, config)
+
+        scope = {}
+        headers = MagicMock()
+
+        ip = middleware._get_client_ip(scope, headers)
+        assert ip == "unknown"
+
+
+class TestMiddlewareExclusions:
+    """Tests for path exclusion logic."""
+
+    def test_should_exclude_path(self) -> None:
+        """Test path exclusion logic."""
+        config = AuditConfig(
+            control_db_url="postgresql+asyncpg://test",
+        )
+        app = MagicMock()
+        middleware = AuditMiddleware(app, config)
+
+        assert middleware._should_exclude_path("/health") is True
+        assert middleware._should_exclude_path("/api/users") is False
+
+
+class TestMiddlewareActorExtraction:
+    """Tests for actor extraction from JWT."""
+
+    def test_extract_actor_with_valid_token(self) -> None:
+        """Test actor extraction from Authorization header."""
+        config = AuditConfig(
+            control_db_url="postgresql+asyncpg://test",
+            jwt_secret="secret",
+            jwt_verify_signature=True,
+        )
+        app = MagicMock()
+        middleware = AuditMiddleware(app, config)
+
+        from jose import jwt
+        token = jwt.encode(
+            {"sub": "user123", "actor_type": "tenant_user", "email": "user@example.com"},
+            "secret",
+            algorithm="HS256",
+        )
+
+        headers = MagicMock()
+        headers.get = MagicMock(return_value=f"Bearer {token}")
+
+        actor = middleware._extract_actor(headers)
+        assert actor is not None
+        assert actor["actor_id"] == "user123"
+        assert actor["actor_type"] == "tenant_user"
+        assert actor["actor_email"] == "user@example.com"
+
+    def test_extract_actor_no_auth_header(self) -> None:
+        """Test that actor is None when no Authorization header."""
         config = AuditConfig(control_db_url="postgresql+asyncpg://test")
         app = MagicMock()
         middleware = AuditMiddleware(app, config)
 
-        request = MagicMock()
-        request.headers = {}
-        request.client = MagicMock()
-        request.client.host = "192.168.1.1"
+        headers = MagicMock()
+        headers.get = MagicMock(return_value=None)
 
-        ip = middleware._get_client_ip(request)
-        assert ip == "192.168.1.1"
+        actor = middleware._extract_actor(headers)
+        assert actor is None
 
-    def test_get_client_ip_forwarded(self) -> None:
-        """Test client IP extraction from X-Forwarded-For."""
+
+class TestResponseBodyProcessing:
+    """Tests for response body processing."""
+
+    def test_process_response_body_json(self) -> None:
+        """Test processing JSON response body."""
+        config = AuditConfig(
+            control_db_url="postgresql+asyncpg://test",
+            max_body_size_bytes=1000,
+        )
+        app = MagicMock()
+        middleware = AuditMiddleware(app, config)
+
+        body = b'{"user": "test", "password": "secret123"}'
+        result = middleware._process_response_body(body)
+
+        assert result is not None
+        assert result["user"] == "test"
+        assert result["password"] == "[REDACTED]"
+
+    def test_process_response_body_truncation(self) -> None:
+        """Test response body truncation when exceeding max size."""
+        config = AuditConfig(
+            control_db_url="postgresql+asyncpg://test",
+            max_body_size_bytes=20,
+        )
+        app = MagicMock()
+        middleware = AuditMiddleware(app, config)
+
+        body = b'{"user": "john", "id": 123}'
+        result = middleware._process_response_body(body)
+
+        assert result is not None
+        assert result.get("_truncated") is True
+
+    def test_process_response_body_non_json(self) -> None:
+        """Test processing non-JSON response body."""
+        config = AuditConfig(
+            control_db_url="postgresql+asyncpg://test",
+        )
+        app = MagicMock()
+        middleware = AuditMiddleware(app, config)
+
+        body = b"Plain text response"
+        result = middleware._process_response_body(body)
+
+        assert result is not None
+        assert result["_raw"] == "Plain text response"
+
+    def test_process_response_body_empty(self) -> None:
+        """Test processing empty response body."""
         config = AuditConfig(control_db_url="postgresql+asyncpg://test")
         app = MagicMock()
         middleware = AuditMiddleware(app, config)
 
-        request = MagicMock()
-        request.headers = {"X-Forwarded-For": "10.0.0.1, 192.168.1.1"}
-        request.client = MagicMock()
+        result = middleware._process_response_body(b"")
+        assert result is None
 
-        ip = middleware._get_client_ip(request)
-        assert ip == "10.0.0.1"
+    def test_process_response_body_redaction(self) -> None:
+        """Test that sensitive fields are redacted in response body."""
+        config = AuditConfig(
+            control_db_url="postgresql+asyncpg://test",
+            redact_fields={"api_key", "token"},
+        )
+        app = MagicMock()
+        middleware = AuditMiddleware(app, config)
+
+        body = b'{"username": "admin", "api_key": "secret123", "token": "abc"}'
+        result = middleware._process_response_body(body)
+
+        assert result is not None
+        assert result["username"] == "admin"
+        assert result["api_key"] == "[REDACTED]"
+        assert result["token"] == "[REDACTED]"

@@ -11,56 +11,56 @@ class TestNormalizeActorType:
     """Tests for normalize_actor_type function."""
 
     def test_returns_enum_directly(self) -> None:
-        """Test that ActorType enum values are returned unchanged."""
+        """Test that ActorType enum values are returned as strings."""
         result = normalize_actor_type(ActorType.PLATFORM_ADMIN)
-        assert result == ActorType.PLATFORM_ADMIN
+        assert result == "platform_admin"
 
     def test_canonical_platform_admin(self) -> None:
         """Test normalizing platform_admin."""
         result = normalize_actor_type("platform_admin")
-        assert result == ActorType.PLATFORM_ADMIN
+        assert result == "platform_admin"
 
     def test_canonical_tenant_user(self) -> None:
         """Test normalizing tenant_user."""
         result = normalize_actor_type("tenant_user")
-        assert result == ActorType.TENANT_USER
+        assert result == "tenant_user"
 
     def test_canonical_anonymous(self) -> None:
         """Test normalizing anonymous."""
         result = normalize_actor_type("anonymous")
-        assert result == ActorType.ANONYMOUS
+        assert result == "anonymous"
 
     def test_unknown_type_defaults_to_anonymous(self) -> None:
         """Test that unknown actor types fall back to ANONYMOUS."""
         result = normalize_actor_type("unknown_type")
-        assert result == ActorType.ANONYMOUS
+        assert result == "anonymous"
 
     def test_alias_mapping(self) -> None:
         """Test that alias mapping resolves to canonical value."""
         aliases = {"ops_admin": "platform_admin", "internal_user": "tenant_user"}
         result = normalize_actor_type("ops_admin", aliases)
-        assert result == ActorType.PLATFORM_ADMIN
+        assert result == "platform_admin"
 
     def test_alias_with_different_case(self) -> None:
         """Test that input is case-insensitive but alias keys must match."""
         aliases = {"ops_admin": "platform_admin"}
         result = normalize_actor_type("OPS_ADMIN", aliases)
-        assert result == ActorType.PLATFORM_ADMIN
+        assert result == "platform_admin"
 
     def test_whitespace_trimmed(self) -> None:
         """Test that whitespace is trimmed before lookup."""
         result = normalize_actor_type("  tenant_user  ")
-        assert result == ActorType.TENANT_USER
+        assert result == "tenant_user"
 
     def test_none_aliases(self) -> None:
         """Test with None aliases dict."""
         result = normalize_actor_type("anonymous", None)
-        assert result == ActorType.ANONYMOUS
+        assert result == "anonymous"
 
     def test_unknown_after_alias_fallback(self) -> None:
         """Test that unknown value without alias defaults to ANONYMOUS."""
         result = normalize_actor_type("random_value", {"foo": "bar"})
-        assert result == ActorType.ANONYMOUS
+        assert result == "anonymous"
 
 
 class TestExtractActorWithAliases:
@@ -82,7 +82,7 @@ class TestExtractActorWithAliases:
             actor_type_aliases={"ops_admin": "platform_admin"},
         )
         assert actor is not None
-        assert actor.actor_type == ActorType.PLATFORM_ADMIN
+        assert actor.actor_type == "platform_admin"
         assert actor.actor_id == "user1"
         assert actor.email == "admin@example.com"
 
@@ -99,9 +99,9 @@ class TestExtractActorWithAliases:
         actor2 = extract_actor(token2, secret="secret", actor_type_aliases=aliases)
 
         assert actor1 is not None
-        assert actor1.actor_type == ActorType.PLATFORM_ADMIN
+        assert actor1.actor_type == "platform_admin"
         assert actor2 is not None
-        assert actor2.actor_type == ActorType.TENANT_USER
+        assert actor2.actor_type == "tenant_user"
 
     def test_no_alias_match_defaults_to_anonymous(self) -> None:
         """Test that unknown actor type falls back to ANONYMOUS."""
@@ -112,7 +112,7 @@ class TestExtractActorWithAliases:
             actor_type_aliases={"some_alias": "platform_admin"},
         )
         assert actor is not None
-        assert actor.actor_type == ActorType.ANONYMOUS
+        assert actor.actor_type == "anonymous"
 
 
 class TestAuditConfigActorTypeAliases:

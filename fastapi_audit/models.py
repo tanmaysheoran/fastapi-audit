@@ -1,9 +1,9 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import DateTime, Enum, Integer, JSON, String, Text
+from sqlalchemy import DateTime, Integer, JSON, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -19,18 +19,26 @@ class ActorType(enum.Enum):
 def normalize_actor_type(
     actor_type: ActorType | str,
     aliases: dict[str, str] | None = None,
-) -> ActorType:
-    """Normalize an actor type string to a canonical enum value."""
+) -> str:
+    """Normalize an actor type string to a canonical string value.
+
+    Args:
+        actor_type: The actor type to normalize (enum or string).
+        aliases: Optional mapping of aliases to canonical types.
+
+    Returns:
+        The canonical actor type string value, or "anonymous" for unknown types.
+    """
     if isinstance(actor_type, ActorType):
-        return actor_type
+        return actor_type.value
 
     normalized = actor_type.strip().lower()
     resolved = (aliases or {}).get(normalized, normalized)
 
     try:
-        return ActorType(resolved)
+        return ActorType(resolved).value
     except ValueError:
-        return ActorType.ANONYMOUS
+        return ActorType.ANONYMOUS.value
 
 
 class Base(DeclarativeBase):
@@ -55,8 +63,8 @@ class AuditLog(Base):
     )
     request_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    actor_type: Mapped[ActorType] = mapped_column(
-        Enum(ActorType, name="actor_type_enum", create_constraint=True),
+    actor_type: Mapped[str] = mapped_column(
+        String(50),
         nullable=False,
     )
     actor_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -78,7 +86,7 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
     )
 
     def __repr__(self) -> str:

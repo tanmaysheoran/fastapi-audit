@@ -136,4 +136,4 @@ class TestAuditLogHelper:
         )
 
         created = db.add.call_args.args[0]
-        assert created.actor_type == ActorType.PLATFORM_ADMIN
+        assert created.actor_type == "platform_admin"

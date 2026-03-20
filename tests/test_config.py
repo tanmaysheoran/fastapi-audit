@@ -115,6 +115,39 @@ class TestAuditConfigProperties:
         config = AuditConfig(control_db_url="postgresql+asyncpg://test")
         assert config.actor_type_aliases_lower == {}
 
+    def test_default_jwt_claim_map_present(self) -> None:
+        """Test that default jwt_claim_map is present."""
+        config = AuditConfig(control_db_url="postgresql+asyncpg://test")
+        assert config.jwt_claim_map == {
+            "actor_id": "sub",
+            "actor_type": "actor_type",
+            "actor_email": "email",
+        }
+
+    def test_custom_jwt_claim_map_partial_override(self) -> None:
+        """Test that partial jwt_claim_map override merges with defaults."""
+        config = AuditConfig(
+            control_db_url="postgresql+asyncpg://test",
+            jwt_claim_map={"actor_id": "user_id"},
+        )
+        assert config.jwt_claim_map["actor_id"] == "user_id"
+        assert config.jwt_claim_map["actor_type"] == "actor_type"
+        assert config.jwt_claim_map["actor_email"] == "email"
+
+    def test_custom_jwt_claim_map_full_override(self) -> None:
+        """Test that full jwt_claim_map override works."""
+        config = AuditConfig(
+            control_db_url="postgresql+asyncpg://test",
+            jwt_claim_map={
+                "actor_id": "uid",
+                "actor_type": "role",
+                "actor_email": "mail",
+            },
+        )
+        assert config.jwt_claim_map["actor_id"] == "uid"
+        assert config.jwt_claim_map["actor_type"] == "role"
+        assert config.jwt_claim_map["actor_email"] == "mail"
+
 
 class TestAuditConfigEnvVars:
     """Tests for environment variable overrides."""

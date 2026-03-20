@@ -21,6 +21,12 @@ DEFAULT_EXCLUDE_PATHS: frozenset[str] = frozenset({
     "/redoc",
 })
 
+DEFAULT_JWT_CLAIM_MAP: dict[str, str] = {
+    "actor_id": "sub",
+    "actor_type": "actor_type",
+    "actor_email": "email",
+}
+
 
 class AuditConfig(BaseSettings):
     """Configuration for the audit middleware.
@@ -34,6 +40,19 @@ class AuditConfig(BaseSettings):
         capture_response_body: Whether to capture response body snapshots.
         capture_orm_diffs: Whether to capture ORM-level field diffs.
         log_anonymous: Whether to log requests without authenticated actors.
+        jwt_secret: Secret for JWT signature verification. If None, tokens are decoded
+            without verification (WARNING: allows forged tokens in audit logs).
+        jwt_verify_signature: If True, always verify JWT signatures. If False and
+            jwt_secret is set, verification is attempted. Default is False for
+            backward compatibility. Set to True in production.
+        trusted_proxy_depth: Number of trusted proxies in front of the application.
+            Used to safely extract client IP from X-Forwarded-For. If 0, X-Forwarded-For
+            is ignored entirely. If >0, counts from the right of the IP list.
+        max_body_size_bytes: Maximum size of request/response body to capture.
+            Bodies larger than this are truncated and marked with {"_truncated": true}.
+        jwt_claim_map: Mapping of audit field names to JWT claim keys. Allows remapping
+            claim names when tokens use different field names (e.g., "user_id" instead of "sub").
+            Merged with defaults - only override the keys you need.
     """
 
     model_config = SettingsConfigDict(
@@ -49,6 +68,11 @@ class AuditConfig(BaseSettings):
     capture_response_body: bool = True
     capture_orm_diffs: bool = True
     log_anonymous: bool = False
+    jwt_secret: str | None = None
+    jwt_verify_signature: bool = False
+    trusted_proxy_depth: int = 0
+    max_body_size_bytes: int = 10_000
+    jwt_claim_map: dict[str, str] = {}
 
     @model_validator(mode="before")
     @classmethod
@@ -82,6 +106,14 @@ class AuditConfig(BaseSettings):
                     for key, value in custom_aliases.items()
                 }
         return data
+
+    @model_validator(mode="after")
+    def merge_jwt_claim_map(self) -> "AuditConfig":
+        """Merge custom jwt_claim_map with defaults."""
+        merged = dict(DEFAULT_JWT_CLAIM_MAP)
+        merged.update(self.jwt_claim_map)
+        object.__setattr__(self, "jwt_claim_map", merged)
+        return self
 
     def should_exclude(self, path: str) -> bool:
         """Check if the given path should be excluded from audit logging."""

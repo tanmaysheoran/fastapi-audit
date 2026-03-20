@@ -39,9 +39,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.inspection import inspect
 
 if TYPE_CHECKING:
-    pass
+    from fastapi_audit.config import AuditConfig
 
 logger = logging.getLogger("audit")
+
+_audit_config: "AuditConfig | None" = None
+
+def set_audit_config(config: "AuditConfig") -> None:
+    """Set the audit config for use in ORM diff sanitization.
+
+    Called by middleware during initialization.
+
+    Args:
+        config: The AuditConfig instance.
+    """
+    global _audit_config
+    _audit_config = config
+
+def get_audit_config() -> "AuditConfig | None":
+    """Get the current audit config."""
+    return _audit_config
 
 # Module-level flag to ensure listeners are registered only once
 _registered: bool = False
@@ -171,8 +188,9 @@ def _extract_insert(obj: Any) -> dict[str, Any]:
     """
     mapper = inspect(obj).mapper
     table = mapper.local_table.name
-    pk = _extract_pk(mapper)
-    after = _extract_attributes(mapper)
+    pk = _extract_pk(mapper, obj)
+    after = _extract_attributes(mapper, obj)
+    after = _sanitize_diff(after)
 
     return {
         "table": table,
@@ -195,7 +213,7 @@ def _extract_update(session: Any, obj: Any) -> dict[str, Any]:
     """
     mapper = inspect(obj).mapper
     table = mapper.local_table.name
-    pk = _extract_pk(mapper)
+    pk = _extract_pk(mapper, obj)
 
     before: dict[str, Any] = {}
     after: dict[str, Any] = {}
@@ -206,6 +224,9 @@ def _extract_update(session: Any, obj: Any) -> dict[str, Any]:
         if history.has_changes():
             before[key] = history.deleted[0] if history.deleted else None
             after[key] = history.added[0] if history.added else None
+
+    before = _sanitize_diff(before)
+    after = _sanitize_diff(after)
 
     return {
         "table": table,
@@ -227,8 +248,9 @@ def _extract_delete(obj: Any) -> dict[str, Any]:
     """
     mapper = inspect(obj).mapper
     table = mapper.local_table.name
-    pk = _extract_pk(mapper)
-    before = _extract_attributes(mapper)
+    pk = _extract_pk(mapper, obj)
+    before = _extract_attributes(mapper, obj)
+    before = _sanitize_diff(before)
 
     return {
         "table": table,
@@ -239,28 +261,45 @@ def _extract_delete(obj: Any) -> dict[str, Any]:
     }
 
 
-def _extract_pk(mapper: Any) -> Any:
-    """Extract the primary key value from a mapper.
+def _sanitize_diff(diff: dict[str, Any]) -> dict[str, Any]:
+    """Sanitize a diff dict by redacting sensitive fields.
+
+    Args:
+        diff: The diff dict to sanitize.
+
+    Returns:
+        Sanitized diff dict with sensitive fields redacted.
+    """
+    if not _audit_config:
+        return diff
+    from fastapi_audit.sanitizer import redact_value
+    return redact_value(diff, _audit_config.redact_fields_lower)
+
+
+def _extract_pk(mapper: Any, instance: Any) -> Any:
+    """Extract the primary key value from a mapper and instance.
 
     Args:
         mapper: The SQLAlchemy mapper.
+        instance: The ORM object instance.
 
     Returns:
         The primary key value.
     """
     pk_cols = mapper.primary_key
     if len(pk_cols) == 1:
-        return getattr(mapper.instance, pk_cols[0].key)
-    return tuple(getattr(mapper.instance, col.key) for col in pk_cols)
+        return getattr(instance, pk_cols[0].key)
+    return tuple(getattr(instance, col.key) for col in pk_cols)
 
 
-def _extract_attributes(mapper: Any) -> dict[str, Any]:
-    """Extract all attribute values from a mapper.
+def _extract_attributes(mapper: Any, instance: Any) -> dict[str, Any]:
+    """Extract all attribute values from a mapper and instance.
 
     Args:
         mapper: The SQLAlchemy mapper.
+        instance: The ORM object instance.
 
     Returns:
         Dict of attribute names to values.
     """
-    return {attr.key: getattr(mapper.instance, attr.key) for attr in mapper.attrs}
+    return {attr.key: getattr(instance, attr.key) for attr in mapper.attrs}

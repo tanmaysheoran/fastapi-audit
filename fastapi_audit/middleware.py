@@ -140,11 +140,13 @@ class AuditMiddleware:
             if self._config.capture_request_body and request_body_bytes:
                 request_body = sanitize_body(request_body_bytes, self._config)
 
-            await self._pass_through(scope, receive, audit_send)
+            patched_receive = scope.get("_patched_receive", receive)
+            await self._pass_through(scope, patched_receive, audit_send)
 
         except Exception as e:
             logger.error(f"Error in audit middleware: {e}", exc_info=True)
-            await self._pass_through(scope, receive, send)
+            patched_receive = scope.get("_patched_receive", receive)
+            await self._pass_through(scope, patched_receive, send)
             return
 
         finally:
@@ -205,6 +207,18 @@ class AuditMiddleware:
                     if message["type"] == "http.request":
                         body += message.get("body", b"")
                         more_body = message.get("more_body", False)
+
+            received_message = {"type": "http.request", "body": body, "more_body": False}
+            _consumed = False
+
+            async def replay_receive() -> Message:
+                nonlocal _consumed
+                if not _consumed:
+                    _consumed = True
+                    return received_message
+                return await receive()
+
+            scope["_patched_receive"] = replay_receive
 
         return body if body else None
 

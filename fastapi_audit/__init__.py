@@ -29,7 +29,7 @@ from fastapi_audit.helpers import audit_log
 from fastapi_audit.models import ActorType, AuditLog
 from fastapi_audit.middleware import AuditMiddleware
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 __all__ = [
     "AuditConfig",

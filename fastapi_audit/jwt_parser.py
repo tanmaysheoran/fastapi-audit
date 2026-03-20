@@ -91,7 +91,7 @@ def extract_actor(
         return None
 
     actor_type = normalize_actor_type(
-        str(payload.get(actor_type_key, ActorType.ANONYMOUS.value)),
+        str(payload.get(actor_type_key, "anonymous")),
         actor_type_aliases,
     )
 

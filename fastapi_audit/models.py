@@ -34,11 +34,7 @@ def normalize_actor_type(
 
     normalized = actor_type.strip().lower()
     resolved = (aliases or {}).get(normalized, normalized)
-
-    try:
-        return ActorType(resolved).value
-    except ValueError:
-        return ActorType.ANONYMOUS.value
+    return resolved
 
 
 class Base(DeclarativeBase):
